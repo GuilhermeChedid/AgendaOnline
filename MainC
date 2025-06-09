@@ -1,0 +1,267 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+// Arquivos usados para armazenar dados
+#define USER_FILE "usuarios.txt"
+#define EVENT_FILE "eventos.txt"
+#define TEMP_FILE "temp.txt"
+
+// Estrutura que representa um evento
+typedef struct {
+    char usuario[50];
+    char titulo[100];
+    char data[20];
+    char hora[10];
+    char descricao[200];
+} Evento;
+
+// Função para limpar o buffer do teclado (evita problemas com fgets após scanf)
+void limpar_buffer() {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
+// Compara duas datas (formato dd/mm/aaaa)
+int comparar_datas(const char* data1, const char* data2) {
+    return strcmp(data1, data2) == 0;
+}
+
+// Obtém a data atual e salva no buffer
+void obter_data_atual(char* buffer) {
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    sprintf(buffer, "%02d/%02d/%04d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
+}
+
+// Lista eventos de um usuário (com ou sem filtro por data)
+void listar_eventos(const char* usuario, const char* filtro_data) {
+    FILE* file = fopen(EVENT_FILE, "r");
+    if (!file) return;
+
+    Evento e;
+    char linha[512];
+    int encontrados = 0;
+
+    // Lê linha por linha do arquivo de eventos
+    while (fgets(linha, sizeof(linha), file)) {
+        // Divide a linha em campos separados por "|"
+        sscanf(linha, "%[^|]|%[^|]|%[^|]|%[^|]|%[^\n]", e.usuario, e.titulo, e.data, e.hora, e.descricao);
+
+        // Verifica se é do usuário e se atende ao filtro (se houver)
+        if (strcmp(e.usuario, usuario) == 0 && (filtro_data == NULL || comparar_datas(e.data, filtro_data))) {
+            printf("Título: %s\nData: %s\nHora: %s\nDescrição: %s\n\n", e.titulo, e.data, e.hora, e.descricao);
+            encontrados++;
+        }
+    }
+
+    if (!encontrados) printf("Nenhum evento encontrado.\n");
+    fclose(file);
+}
+
+// Adiciona um evento ao arquivo
+void adicionar_evento(const char* usuario) {
+    FILE* file = fopen(EVENT_FILE, "a");
+    if (!file) return;
+
+    Evento e;
+    strcpy(e.usuario, usuario);
+
+    printf("Título: ");
+    limpar_buffer();  // limpa buffer antes de fgets
+    fgets(e.titulo, sizeof(e.titulo), stdin); strtok(e.titulo, "\n");
+
+    printf("Data (dd/mm/aaaa): ");
+    scanf("%s", e.data);
+    printf("Hora (hh:mm): ");
+    scanf("%s", e.hora);
+
+    printf("Descrição: ");
+    limpar_buffer();
+    fgets(e.descricao, sizeof(e.descricao), stdin); strtok(e.descricao, "\n");
+
+    // Grava evento em formato delimitado por "|"
+    fprintf(file, "%s|%s|%s|%s|%s\n", e.usuario, e.titulo, e.data, e.hora, e.descricao);
+    fclose(file);
+    printf("Evento adicionado com sucesso!\n");
+}
+
+// Edita um evento existente (buscando por título)
+void editar_evento(const char* usuario) {
+    FILE* file = fopen(EVENT_FILE, "r");
+    FILE* temp = fopen(TEMP_FILE, "w");
+    if (!file || !temp) return;
+
+    Evento e;
+    char linha[512], titulo_busca[100];
+    int encontrado = 0;
+
+    printf("Título do evento que deseja editar: ");
+    limpar_buffer();
+    fgets(titulo_busca, sizeof(titulo_busca), stdin); strtok(titulo_busca, "\n");
+
+    // Copia todos os eventos para o arquivo temporário, editando o desejado
+    while (fgets(linha, sizeof(linha), file)) {
+        sscanf(linha, "%[^|]|%[^|]|%[^|]|%[^|]|%[^\n]", e.usuario, e.titulo, e.data, e.hora, e.descricao);
+
+        if (strcmp(e.usuario, usuario) == 0 && strcmp(e.titulo, titulo_busca) == 0) {
+            printf("Novo título: ");
+            fgets(e.titulo, sizeof(e.titulo), stdin); strtok(e.titulo, "\n");
+            printf("Nova data (dd/mm/aaaa): ");
+            scanf("%s", e.data);
+            printf("Nova hora (hh:mm): ");
+            scanf("%s", e.hora);
+            printf("Nova descrição: ");
+            limpar_buffer();
+            fgets(e.descricao, sizeof(e.descricao), stdin); strtok(e.descricao, "\n");
+            encontrado = 1;
+        }
+
+        fprintf(temp, "%s|%s|%s|%s|%s\n", e.usuario, e.titulo, e.data, e.hora, e.descricao);
+    }
+
+    fclose(file);
+    fclose(temp);
+    remove(EVENT_FILE);
+    rename(TEMP_FILE, EVENT_FILE);
+
+    if (encontrado)
+        printf("Evento editado com sucesso!\n");
+    else
+        printf("Evento não encontrado.\n");
+}
+
+// Remove um evento
+void excluir_evento(const char* usuario) {
+    FILE* file = fopen(EVENT_FILE, "r");
+    FILE* temp = fopen(TEMP_FILE, "w");
+    if (!file || !temp) return;
+
+    Evento e;
+    char linha[512], titulo_busca[100];
+    int removido = 0;
+
+    printf("Título do evento a excluir: ");
+    limpar_buffer();
+    fgets(titulo_busca, sizeof(titulo_busca), stdin); strtok(titulo_busca, "\n");
+
+    while (fgets(linha, sizeof(linha), file)) {
+        sscanf(linha, "%[^|]|%[^|]|%[^|]|%[^|]|%[^\n]", e.usuario, e.titulo, e.data, e.hora, e.descricao);
+
+        if (strcmp(e.usuario, usuario) == 0 && strcmp(e.titulo, titulo_busca) == 0) {
+            removido = 1;
+            continue;
+        }
+
+        fprintf(temp, "%s|%s|%s|%s|%s\n", e.usuario, e.titulo, e.data, e.hora, e.descricao);
+    }
+
+    fclose(file);
+    fclose(temp);
+    remove(EVENT_FILE);
+    rename(TEMP_FILE, EVENT_FILE);
+
+    if (removido)
+        printf("Evento excluído com sucesso.\n");
+    else
+        printf("Evento não encontrado.\n");
+}
+
+// Exibe eventos do dia atual
+void notificacoes(const char* usuario) {
+    char hoje[20];
+    obter_data_atual(hoje);
+    printf("\n--- Notificações para hoje (%s) ---\n", hoje);
+    listar_eventos(usuario, hoje);
+}
+
+// Cadastro de usuário (evita duplicidade)
+int cadastrar_usuario() {
+    FILE* file = fopen(USER_FILE, "a+");
+    if (!file) return 0;
+
+    char user[50], senha[50];
+    printf("Novo usuário\nUsuário: ");
+    scanf("%s", user);
+    printf("Senha: ");
+    scanf("%s", senha);
+
+    char u[50], s[50];
+    while (fscanf(file, "%s %s", u, s) != EOF)
+        if (strcmp(u, user) == 0) {
+            printf("Usuário já existe.\n");
+            fclose(file);
+            return 0;
+        }
+
+    fprintf(file, "%s %s\n", user, senha);
+    fclose(file);
+    printf("Usuário cadastrado!\n");
+    return 1;
+}
+
+// Login do usuário (verifica nome e senha)
+int login(char* usuario_logado) {
+    FILE* file = fopen(USER_FILE, "r");
+    if (!file) return 0;
+
+    char user[50], senha[50];
+    printf("Login\nUsuário: ");
+    scanf("%s", user);
+    printf("Senha: ");
+    scanf("%s", senha);
+
+    char u[50], s[50];
+    while (fscanf(file, "%s %s", u, s) != EOF)
+        if (strcmp(u, user) == 0 && strcmp(s, senha) == 0) {
+            strcpy(usuario_logado, user);
+            fclose(file);
+            return 1;
+        }
+
+    fclose(file);
+    printf("Usuário ou senha inválidos.\n");
+    return 0;
+}
+
+// Função principal com menu de opções
+int main() {
+    int opcao;
+    char usuario[50] = "";
+
+    do {
+        printf("\n--- AGENDA DIGITAL ---\n");
+        printf("1. Cadastrar usuário\n");
+        printf("2. Login\n");
+        printf("3. Adicionar evento\n");
+        printf("4. Listar eventos\n");
+        printf("5. Filtrar por data\n");
+        printf("6. Editar evento\n");
+        printf("7. Excluir evento\n");
+        printf("8. Notificações do dia\n");
+        printf("0. Sair\nEscolha: ");
+        scanf("%d", &opcao);
+
+        switch (opcao) {
+            case 1: cadastrar_usuario(); break;
+            case 2: if (login(usuario)) printf("Login bem-sucedido!\n"); break;
+            case 3: if (usuario[0]) adicionar_evento(usuario); else printf("Faça login primeiro.\n"); break;
+            case 4: if (usuario[0]) listar_eventos(usuario, NULL); else printf("Faça login primeiro.\n"); break;
+            case 5:
+                if (!usuario[0]) { printf("Faça login primeiro.\n"); break; }
+                char data[20];
+                printf("Digite a data (dd/mm/aaaa): ");
+                scanf("%s", data);
+                listar_eventos(usuario, data);
+                break;
+            case 6: if (usuario[0]) editar_evento(usuario); else printf("Faça login primeiro.\n"); break;
+            case 7: if (usuario[0]) excluir_evento(usuario); else printf("Faça login primeiro.\n"); break;
+            case 8: if (usuario[0]) notificacoes(usuario); else printf("Faça login primeiro.\n"); break;
+            case 0: printf("Saindo...\n"); break;
+            default: printf("Opção inválida.\n");
+        }
+    } while (opcao != 0);
+
+    return 0;
+}
